@@ -5,31 +5,37 @@ import sympy
 import json
 
 
-
 # update functions
 
 def default_json_update(filepath, key, pattern, i):
 
-    new_value = build_from_pattern(pattern, i)
+    new_value, is_error = build_from_pattern(pattern, i)
+
+    if is_error:
+        return True
 
     with open(filepath, 'r') as fl:
 
         j_cfg = json.load(fl)
 
-    old_key = str(j_cfg.get(key, "DNE"))
+    old_value = str(j_cfg.get(key, "DNE"))
 
     j_cfg[key] = new_value
 
     with open(filepath, 'w') as fl:
 
-        json.dump(new_value, fl)
+        json.dump(j_cfg, fl, indent=4)
 
-    print(f"{filepath} | {old_key} -> {new_value}")
+    print(f"\033[32mUPDATED\033[0m | {filepath} [{key}]:  {old_value} -> {new_value}")
+
+    return False
 
 def filename_update(filepath, pattern, idx):
 
     # create new filename
-    new_filename = build_from_pattern(pattern, idx)
+    new_filename, is_error = build_from_pattern(pattern, idx)
+    if is_error:
+        return True
 
     # create renamed path
     l_split_path = list(os.path.split(filepath))
@@ -39,15 +45,14 @@ def filename_update(filepath, pattern, idx):
     # check for file extension
     if len(str_new_path.split('.')) == 1 and len(filepath.split('.')) > 1:
 
-        str_new_path += filepath.split('.')[-1]
+        str_new_path += '.' + filepath.split('.')[-1]
 
     # update
     os.rename(filepath, str_new_path)
 
-    print(f"{filepath} -> {str_new_path}")
+    print(f"\033[34mRENAMED\033[0m | {filepath} -> {str_new_path}")
 
-
-
+    return False
 
 # parse functions
 
@@ -87,6 +92,11 @@ def build_from_pattern(pattern: str, i: int):
     last_idx = 0
     while expression_start_idx != -1:
 
+        # ensure closing bracket
+        if pattern.find('}', expression_start_idx + 1) == -1:
+            print("\033[31mERROR\033[0m | Closing bracket not found in pattern")
+            return None, True
+
         str_expr = pattern[expression_start_idx + 1: pattern.find('}')]
 
         # get to a format sympy can handle
@@ -100,10 +110,15 @@ def build_from_pattern(pattern: str, i: int):
         last_idx = expression_start_idx
         expression_start_idx = pattern.find('{', last_idx + 1)
 
-    return built_value
+    return built_value, False
 
 
-def main():
+def main() -> int:
+
+    # error handling
+    if len(sys.argv) < 3:
+        print("Must pass directory and at least 1 update as positional arguments")
+        return -1
 
     # unpack args
     directory = sys.argv[1]
@@ -117,16 +132,23 @@ def main():
         for idx, filename in enumerate(dir_files):
 
             filepath = os.path.join(directory, filename)
-            func(filepath, pattern, idx)
+            is_error = func(filepath, pattern, idx + 1)
+
+            if is_error:
+                return -1
 
     # run json updates
     for key, pattern in l_updates:
         for idx, filename in enumerate(dir_files):
 
             filepath = os.path.join(directory, filename)
-            default_json_update(filepath, key, pattern, idx)
+            is_error = default_json_update(filepath, key, pattern, idx + 1)
 
-    print("Complete.")
+            if is_error:
+                return -1
+            
+    return 0
+
 
 if __name__ == "__main__":
 

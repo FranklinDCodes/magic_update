@@ -7,6 +7,8 @@ Command requires the format
 
 Update strings require the format
     <key>:<value_pattern>
+    
+All value patterns are WHITESPACE SENSITIVE and need to have no spaces.
 
 If the key doesn't exist, the update will create it.
 Special updates can be used to update things besides json key/value pairs.
