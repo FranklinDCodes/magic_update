@@ -1,3 +1,4 @@
+
 I developed this for updating json configs primarily.
 Works with pattern expressions that are put inside {} that can be used to update configs.
 All patterns can use the # symbol, which represents the 1-indexed position of the config in the sorted directory.
@@ -7,7 +8,7 @@ Command requires the format
 
 Update strings require the format
     <key>:<value_pattern>
-    
+
 All value patterns are WHITESPACE SENSITIVE and need to have no spaces.
 
 If the key doesn't exist, the update will create it.
@@ -15,3 +16,4 @@ Special updates can be used to update things besides json key/value pairs.
 As of writing this, the only special update is for re-naming files as follows
     FILENAME:<filename_pattern>
 
+dependencies: natsort, sympy

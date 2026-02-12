@@ -3,28 +3,39 @@ import os
 import sys
 import sympy
 import json
+from natsort import natsorted
+import ast
 
 
 # update functions
 
-def default_json_update(filepath, key, pattern, i):
+def default_json_update(filepath, key_str, pattern, i):
 
+    # get value setup
     new_value, is_error = build_from_pattern(pattern, i)
-
     if is_error:
         return True
+    
+    # get key setup
+    key_seq_list = key_str.split('.')
+    key_str_pretty = '[' + ']['.join(key_seq_list) + ']'
 
+    # load
     with open(filepath, 'r') as fl:
+        json_file = json.load(fl)
 
-        j_cfg = json.load(fl)
-
-    old_value = str(j_cfg.get(key, "DNE"))
-
-    j_cfg[key] = new_value
+    # key as deep as required to find lowest dict
+    current_dict = json_file
+    for key in key_seq_list[:-1]:
+        current_dict = current_dict.setdefault(key, {})
+    
+    # grab old value and assign
+    old_value = current_dict.get(key_seq_list[-1], "DNE")
+    current_dict[key_seq_list[-1]] = new_value
 
     with open(filepath, 'w') as fl:
 
-        json.dump(j_cfg, fl, indent=4)
+        json.dump(json_file, fl, indent=4)
 
     print(f"\033[32mUPDATED\033[0m | {filepath} [{key}]:  {old_value} -> {new_value}")
 
@@ -110,7 +121,9 @@ def build_from_pattern(pattern: str, i: int):
         last_idx = expression_start_idx
         expression_start_idx = pattern.find('{', last_idx + 1)
 
-    return built_value, False
+        coerced_value = ast.literal_eval(built_value)
+
+    return coerced_value, False
 
 
 def main() -> int:
@@ -123,7 +136,7 @@ def main() -> int:
     # unpack args
     directory = sys.argv[1]
     dir_files = list(os.listdir(directory))
-    dir_files.sort()
+    dir_files = natsorted(dir_files)
     l_special_updates, l_other_args = parse_special_updates(sys.argv[2:])
     l_updates = parse_updates(l_other_args)
 
@@ -131,7 +144,11 @@ def main() -> int:
     for func, pattern in l_special_updates:
         for idx, filename in enumerate(dir_files):
 
-            filepath = os.path.join(directory, filename)
+            if directory != '.':
+                filepath = os.path.join(directory, filename)
+            else:
+                filepath = filename
+            
             is_error = func(filepath, pattern, idx + 1)
 
             if is_error:
@@ -141,7 +158,11 @@ def main() -> int:
     for key, pattern in l_updates:
         for idx, filename in enumerate(dir_files):
 
-            filepath = os.path.join(directory, filename)
+            if directory != '.':
+                filepath = os.path.join(directory, filename)
+            else:
+                filepath = filename
+            
             is_error = default_json_update(filepath, key, pattern, idx + 1)
 
             if is_error:
