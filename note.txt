@@ -10,6 +10,7 @@ Update strings require the format
     <key>:<value_pattern>
 
 All value patterns are WHITESPACE SENSITIVE and need to have no spaces.
+Using multiple keys for a value is allowed if all keys are separated by periods.
 
 If the key doesn't exist, the update will create it.
 Special updates can be used to update things besides json key/value pairs.
