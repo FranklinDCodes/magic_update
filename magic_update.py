@@ -7,7 +7,11 @@ from natsort import natsorted
 
 
 ESCAPES = {
-    '\s': ' '
+    '\s': ' ',
+    'lt': '<',
+    'gt': '>',
+    'lte': '<=',
+    'gte': '>='
 }
 
 
@@ -141,6 +145,58 @@ def parse_updates(args: list):
 
     return updates
 
+def resolve_ternary_operation(expression: str, idx: int):
+
+    # calculate condition
+    condition_end_idx = expression.find('?')
+    condition_str = expression[:condition_end_idx]
+    try:
+        condition_expr = sympy.sympify(condition_str)
+    except ValueError:
+        print(f"\033[31mERROR\033[0m | The expression \"{condition_str}\" could not be parsed")
+        return None, True
+    condition = condition_expr.subs("x", idx)
+
+    # get value string
+    colon_idx = expression.find(':')
+    if condition:
+        value_str = expression[condition_end_idx + 1:colon_idx]
+    else:
+        value_str = expression[colon_idx + 1:]
+
+    # calculate value
+    try:
+        expr = sympy.sympify(value_str)
+    except ValueError:
+        print(f"\033[31mERROR\033[0m | The expression \"{value_str}\" could not be parsed")
+        return None, True
+
+    value = expr.subs("x", idx)
+
+    return value, False
+
+
+# turns expression in {} into value
+def resolve_expression(expression: str, i: int):
+
+    # get to a format sympy can handle
+    str_clean_expr = expression.replace('#', 'x').replace('[', '(').replace(']', ')')
+
+    # see if there is a conditional
+    if str_clean_expr.find('?') != -1:
+        return resolve_ternary_operation(str_clean_expr, i)
+
+    try:
+        expr = sympy.sympify(str_clean_expr)
+    except ValueError:
+        print(f"\033[31mERROR\033[0m | The expression \"{expression}\" could not be parsed")
+        return None, True
+
+    value = expr.subs("x", i)
+
+    return value, False
+
+# build value from pattern
 def build_from_pattern(pattern: str, i: int):
 
     pattern_clean = clean_escape_chars(pattern)
@@ -158,16 +214,10 @@ def build_from_pattern(pattern: str, i: int):
 
         str_expr = pattern_clean[expression_start_idx + 1: pattern_clean.find('}', expression_start_idx + 1)]
 
-        # get to a format sympy can handle
-        str_clean_expr = str_expr.replace('#', 'x')
+        value, is_error = resolve_expression(str_expr, i)
 
-        try:
-            expr = sympy.sympify(str_clean_expr)
-        except ValueError:
-            print(f"\033[31mERROR\033[0m | The expression \"{str_expr}\" could not be parsed")
+        if is_error:
             return None, True
-    
-        value = expr.subs("x", i)
 
         built_value = built_value.replace('{' + str_expr + '}', str(value))
 
@@ -198,7 +248,7 @@ def main() -> int:
 
     # error handling
     if len(sys.argv) < 3:
-        print("Must pass directory and at least 1 update as positional arguments")
+        print("Must pass directory and at least 1 update as positional argument")
         return -1
 
     # get directory
