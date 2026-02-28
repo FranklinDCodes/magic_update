@@ -165,6 +165,9 @@ def resolve_ternary_operation(expression: str, idx: int):
         value_str = expression[colon_idx + 1:]
 
     # calculate value
+    if value_str.find("x") == -1:
+        return value_str, False
+
     try:
         expr = sympy.sympify(value_str)
     except ValueError:
