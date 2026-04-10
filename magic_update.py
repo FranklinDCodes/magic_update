@@ -4,15 +4,20 @@ import sys
 import sympy
 import json
 from natsort import natsorted
+import json
+from platformdirs import user_data_dir, user_config_dir
 
 
 ESCAPES = {
-    '\s': ' ',
-    'lt': '<',
-    'gt': '>',
-    'lte': '<=',
-    'gte': '>='
+    '*SPACE': ' ',
+    '*LT': '<',
+    '*GT': '>',
+    '*LTE': '<=',
+    '*GTE': '>='
 }
+
+
+DEF_FILE_NAME = "definitions.json"
 
 
 # update functions
@@ -67,6 +72,10 @@ def filename_update(filepath, pattern, idx):
     if len(str_new_path.split('.')) == 1 and len(filepath.split('.')) > 1:
 
         str_new_path += '.' + filepath.split('.')[-1]
+
+    if filepath.split('.')[-1] != 'json' and os.path.normcase(filepath) != os.path.normcase(str_new_path):
+        print(f"\033[91mWARNING\033[0m | {filepath} is not a json file and was not renamed.")
+        return False
 
     # update
     os.rename(filepath, str_new_path)
@@ -132,7 +141,7 @@ def parse_special_updates(args: list):
 
     return l_special_updates, args
     
-def parse_updates(args: list):
+def parse_args(args: list):
 
     updates = list()
 
@@ -179,8 +188,28 @@ def resolve_ternary_operation(expression: str, idx: int):
     return value, False
 
 
+# keys for special keywords and puts in their patterns
+def replace_keyword_definitions (expression: str):
+
+    # read keyword def file
+    def_file = definitions_file()
+    try:
+        with open(def_file, 'r') as fl:
+            d_defs = json.load(fl)
+    except FileNotFoundError:
+        d_defs = dict()
+
+    for (key, value) in d_defs.items():
+
+        expression = expression.replace(key, value)
+
+    return expression
+
 # turns expression in {} into value
 def resolve_expression(expression: str, i: int):
+
+    # replace special keyword definitions
+    expression = replace_keyword_definitions('[' + expression + ']')
 
     # get to a format sympy can handle
     str_clean_expr = expression.replace('#', 'x').replace('[', '(').replace(']', ')')
@@ -234,7 +263,7 @@ def build_from_pattern(pattern: str, i: int):
 
     return coerced_value, False
 
-
+# loads directory
 def get_files(dir):
 
     try:
@@ -247,7 +276,76 @@ def get_files(dir):
     return dir_files, False
 
 
+# function to create the definitions file if it doesn't exist and return the path
+def definitions_file() -> str:
+
+    app_name = "MagicUpdate"
+    app_author = "FranklinDoaneDev"
+
+    # make dir
+    data_path = user_data_dir(app_name, app_author)
+    os.makedirs(os.path.split(os.path.join(data_path, DEF_FILE_NAME))[0], exist_ok=True)
+
+    return os.path.join(data_path, DEF_FILE_NAME)
+
+# basically alternate main function if magic_update define is run
+def define() -> int:
+
+    def_path = definitions_file()
+
+    # read definitions file
+    # check if non existent
+    try:
+        with open(def_path, 'r') as fl:
+            d_defs = json.load(fl)
+    except FileNotFoundError:
+        d_defs = dict()
+
+    # check that at least 1 def was passed
+    if len(sys.argv) < 3:
+        print("Must pass at least 1 definition")
+        return -1
+
+    # parse definitions
+    lt_parsed = parse_args(sys.argv[2:])
+
+    # check if they exist
+    lt_add = list()
+    for (keyword, pattern) in lt_parsed:
+
+        # if word already has def
+        if keyword in d_defs:
+
+            # grab previous def and ask user if they want to overwrite it
+            prev_def = d_defs[keyword]
+            print(f"\nThe keyword {keyword} is already defined as {prev_def}.")
+            ow_input = input("Would you like to overwrite it? [Y/n] ")
+
+            # overwrite
+            if ow_input.strip().lower() != 'n':
+                lt_add.append((keyword, pattern))
+
+        else:
+            lt_add.append((keyword, pattern))
+
+    # add 
+    for (keyword, pattern) in lt_add:
+        d_defs[keyword] = pattern
+
+        # print
+        print(f"\033[93mDEFINED\033[00m | {keyword} = {pattern}")
+
+    # write
+    with open(def_path, 'w') as fl:
+        json.dump(d_defs, fl)
+
+    return 0
+
 def main() -> int:
+    
+    # check if defining
+    if sys.argv[1] == "define":
+        return define()
 
     # error handling
     if len(sys.argv) < 3:
@@ -262,7 +360,7 @@ def main() -> int:
 
     # parse updates
     l_special_updates, l_other_args = parse_special_updates(sys.argv[2:])
-    l_updates = parse_updates(l_other_args)
+    l_updates = parse_args(l_other_args)
 
     # run special updates
     for func, pattern in l_special_updates:
