@@ -154,6 +154,30 @@ def parse_args(args: list):
 
     return updates
 
+# attempts to fix error of ternary expression grouping
+# returns str and bool
+# string is new expression, and bool is true if changes were made
+def attempt_fix_ternary_expression_grouping(whole_ternary_operation: str, problematic_expression: str):
+
+    # setup bools for solving
+    more_open_parens = problematic_expression.count('(') > problematic_expression.count(')')
+    more_close_parens = problematic_expression.count('(') < problematic_expression.count(')')
+    equal_parens_in_whole_expression = whole_ternary_operation.count('(') == whole_ternary_operation.count(')')
+
+    changes = False
+
+    if more_open_parens and equal_parens_in_whole_expression:
+
+        changes = True
+        problematic_expression = problematic_expression[problematic_expression.find('(')+1:]
+    
+    elif more_close_parens and equal_parens_in_whole_expression:
+
+        changes = True
+        problematic_expression = problematic_expression[:problematic_expression.rfind(')')]
+
+    return problematic_expression, changes
+
 def resolve_ternary_operation(expression: str, idx: int):
 
     # calculate condition
@@ -162,8 +186,23 @@ def resolve_ternary_operation(expression: str, idx: int):
     try:
         condition_expr = sympy.sympify(condition_str)
     except ValueError:
-        print(f"\033[31mERROR\033[0m | The expression \"{condition_str}\" could not be parsed")
-        return None, True
+
+        # attempt to resolve it if grouping problem due to expression being in larger group
+        new_condition_expr, try_again = attempt_fix_ternary_expression_grouping(expression, condition_str)
+
+        if try_again:
+
+            try:
+                condition_expr = sympy.sympify(new_condition_expr)
+            except ValueError:
+                print(f"\033[31mERROR\033[0m | The expression \"{condition_expr}\" could not be parsed")
+                return None, True
+
+        else:
+
+            print(f"\033[31mERROR\033[0m | The expression \"{condition_expr}\" could not be parsed")
+            return None, True
+    
     condition = condition_expr.subs("x", idx)
 
     # get value string
@@ -180,8 +219,22 @@ def resolve_ternary_operation(expression: str, idx: int):
     try:
         expr = sympy.sympify(value_str)
     except ValueError:
-        print(f"\033[31mERROR\033[0m | The expression \"{value_str}\" could not be parsed")
-        return None, True
+
+        # attempt to resolve it if grouping problem due to expression being in larger group
+        new_value_str, try_again = attempt_fix_ternary_expression_grouping(expression, value_str)
+
+        if try_again:
+
+            try:
+                expr = sympy.sympify(new_value_str)
+            except ValueError:
+                print(f"\033[31mERROR\033[0m | The expression \"{value_str}\" could not be parsed")
+                return None, True
+
+        else:
+
+            print(f"\033[31mERROR\033[0m | The expression \"{value_str}\" could not be parsed")
+            return None, True
 
     value = expr.subs("x", idx)
 
@@ -201,7 +254,7 @@ def replace_keyword_definitions (expression: str):
 
     for (key, value) in d_defs.items():
 
-        expression = expression.replace(key, value)
+        expression = expression.replace(key, '[' + value + ']')
 
     return expression
 
@@ -209,7 +262,8 @@ def replace_keyword_definitions (expression: str):
 def resolve_expression(expression: str, i: int):
 
     # replace special keyword definitions
-    expression = replace_keyword_definitions('[' + expression + ']')
+    expression = replace_keyword_definitions(expression)
+    print(expression)
 
     # get to a format sympy can handle
     str_clean_expr = expression.replace('#', 'x').replace('[', '(').replace(']', ')')
@@ -303,8 +357,11 @@ def define() -> int:
 
     # check that at least 1 def was passed
     if len(sys.argv) < 3:
-        print("Must pass at least 1 definition")
-        return -1
+        
+        for (keyword, pattern) in d_defs.items():
+            print(f"\033[93mDEFINED\033[00m | {keyword} = {pattern}")
+
+        return 0
 
     # parse definitions
     lt_parsed = parse_args(sys.argv[2:])
@@ -312,6 +369,12 @@ def define() -> int:
     # check if they exist
     lt_add = list()
     for (keyword, pattern) in lt_parsed:
+
+        # replace keywords in definition pattern
+        pattern = replace_keyword_definitions(pattern)
+        
+        # put in special characters
+        pattern = clean_escape_chars(pattern)
 
         # if word already has def
         if keyword in d_defs:
